@@ -14,6 +14,7 @@ pip install vepi
 
 ```python
 from vepi import VenaETL
+import pandas as pd
 
 # Initialize the client
 vena_etl = VenaETL(
@@ -24,15 +25,19 @@ vena_etl = VenaETL(
     model_id='your_model_id'  # Optional, needed for exports
 )
 
-# Import data using file upload
+# Import data using data upload
 df = pd.DataFrame({
-    'Year': ['CurrentYear'],
-    'Version': ['V001'],
-    # ... other columns ...
+    'Value': ['1000'],
+    'Account': ['3910'],
+    'Entity': ['V001'],
+    'Department': ['D10'],
+    'Year': ['2020'],
+    'Period': ['1'],
+    'Scenario': ['Actual'],
+    'Currency': ['Local'],
+    'Measure': ['Value']
+    # ... other required columns ...
 })
-vena_etl.start_with_file(df)
-
-# Or import data using data upload
 vena_etl.import_dataframe(df)
 ```
 
@@ -43,18 +48,32 @@ vena_etl.import_dataframe(df)
 exported_data = vena_etl.export_data(page_size=50000)  # Adjust page size as needed
 ```
 
+### Getting Dimension Hierarchies
+
+```python
+# Get dimension hierarchies
+hierarchy_df = vena_etl.get_dimension_hierarchy()
+
+# View hierarchy structure
+for dim in hierarchy_df['dimension'].unique():
+    print(f"\n{dim} hierarchy:")
+    dim_df = hierarchy_df[hierarchy_df['dimension'] == dim]
+    print(dim_df[['name', 'parent', 'operator']])
+```
+
 ## Features
 
-- Import data using either file upload or direct data upload
+- Import data using direct data upload
 - Export intersections data with pagination support
+- Get dimension hierarchies and their structure
 - Automatic job status monitoring
 - Error handling and logging
 
 ## Requirements
 
 - Python 3.7+
-- requests
-- pandas
+- requests>=2.31.0
+- pandas>=2.0.0
 
 ## License
 

@@ -111,30 +111,57 @@ class VenaETL:
         self._validate_dataframe(df)
             
         try:
-            # Convert DataFrame to CSV in memory
+            # Convert DataFrame to CSV in memory with proper formatting
             csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False)
+            
+            # Ensure all values are strings and handle NaN values
+            df = df.fillna('')
+            df = df.astype(str)
+            
+            # Write to CSV with proper formatting
+            df.to_csv(
+                csv_buffer,
+                index=False,
+                quoting=1,  # Quote all fields
+                escapechar='\\',
+                doublequote=False
+            )
             csv_data = csv_buffer.getvalue()
             
-            # Prepare the file for upload
+            # Prepare the file for upload with proper content type
             files = {
-                'file': (filename, csv_data, 'text/csv')
+                'file': (filename, csv_data, 'text/csv; charset=utf-8')
             }
             
-            # Make the request
+            # Make the request with proper headers
             response = requests.post(
                 self.start_with_file_url,
                 files=files,
                 auth=(self.api_user, self.api_key),
-                headers=self.file_headers
+                headers={
+                    **self.file_headers,
+                    'Content-Type': 'multipart/form-data'
+                }
             )
+            
+            # Check for error response
+            if response.status_code >= 400:
+                try:
+                    error_data = response.json()
+                    error_msg = f"Error details: {error_data}"
+                except:
+                    error_msg = f"Error response: {response.text}"
+                raise requests.exceptions.RequestException(error_msg)
+                
             response.raise_for_status()
             job_id = response.json()['id']
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to start ETL job with file: {e}", file=sys.stderr)
-            return
-
-        self._monitor_job_status(job_id)
+            
+            # Monitor the job status
+            self._monitor_job_status(job_id)
+            
+        except Exception as e:
+            print(f"Failed to start ETL job with file: {str(e)}", file=sys.stderr)
+            raise  # Re-raise the exception to be handled by the caller
 
     def _monitor_job_status(self, job_id: str) -> None:
         """
@@ -157,15 +184,44 @@ class VenaETL:
                 job_status = status_response.json()
 
                 if job_status == "COMPLETED":
-                    print(f"Job {job_id} completed.")
+                    print(f"Job {job_id} completed successfully.")
                     break
                 elif job_status in ["ERROR", "CANCELLED"]:
-                    print(f"Job {job_id} ended with status: {job_status}", file=sys.stderr)
-                    break
+                    # Get error details if available
+                    error_url = f'{self.base_url}/etl/jobs/{job_id}'
+                    error_response = requests.get(
+                        url=error_url,
+                        auth=(self.api_user, self.api_key),
+                        headers=self.headers
+                    )
+                    
+                    error_details = ""
+                    if error_response.status_code == 200:
+                        try:
+                            error_data = error_response.json()
+                            if 'error' in error_data:
+                                error_details = f"\nError details: {error_data['error']}"
+                            elif 'message' in error_data:
+                                error_details = f"\nError message: {error_data['message']}"
+                            elif isinstance(error_data, dict):
+                                error_details = f"\nError response: {error_data}"
+                        except:
+                            error_details = f"\nError response: {error_response.text}"
+                    
+                    print(f"Job {job_id} ended with status: {job_status}{error_details}", file=sys.stderr)
+                    raise Exception(f"Job failed with status: {job_status}{error_details}")
                 else:
                     print(f"Job {job_id} status: {job_status}")
             except requests.exceptions.RequestException as e:
-                print(f"Error checking job status: {e}", file=sys.stderr)
+                error_msg = str(e)
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_data = e.response.json()
+                        error_msg = f"Error details: {error_data}"
+                    except:
+                        error_msg = f"Error response: {e.response.text}"
+                print(f"Error checking job status: {error_msg}", file=sys.stderr)
+                raise Exception(f"Failed to check job status: {error_msg}")
 
             time.sleep(3)
 
@@ -230,4 +286,54 @@ class VenaETL:
             
         except requests.exceptions.RequestException as e:
             print(f"Failed to export data: {e}", file=sys.stderr)
+            return None 
+
+    def get_dimension_hierarchy(self) -> pd.DataFrame:
+        """
+        Get the dimension hierarchies from the Vena model.
+        
+        Returns:
+            pd.DataFrame: DataFrame containing the dimension hierarchies with columns:
+                - dimension: The dimension name
+                - name: The hierarchy member name
+                - alias: The alias for the member (if any)
+                - parent: The parent member name
+                - operator: The operator for the member (+ or -)
+        """
+        if not self.model_id:
+            raise ValueError("Model ID must be set to get dimension hierarchies")
+            
+        try:
+            # Construct the URL for the hierarchy endpoint
+            hierarchy_url = f'{self.base_url}/models/{self.model_id}/hierarchy'
+            
+            # Make the API request
+            response = requests.get(
+                hierarchy_url,
+                auth=(self.api_user, self.api_key),
+                headers=self.headers
+            )
+            response.raise_for_status()
+            
+            # Parse the response
+            data = response.json()
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(data['data'])
+            
+            # Print summary information
+            print(f"Retrieved {len(df)} dimension hierarchy members")
+            print("\nUnique dimensions:")
+            print(df['dimension'].unique())
+            
+            return df
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to get dimension hierarchies: {e}", file=sys.stderr)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    print(f"Error details: {error_data}", file=sys.stderr)
+                except:
+                    print(f"Error response: {e.response.text}", file=sys.stderr)
             return None 
