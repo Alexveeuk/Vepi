@@ -2,6 +2,8 @@
 
 A Python package for interacting with Vena's ETL and data export APIs.
 
+note this is not an official Vena package this is a hobby project.
+
 ## Installation
 
 ```bash
