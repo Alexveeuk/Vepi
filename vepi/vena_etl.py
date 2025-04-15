@@ -3,7 +3,11 @@ import time
 import sys
 import pandas as pd
 import io
-from typing import Optional, Union, List, Dict, Any
+from typing import Optional, Union, List, Dict, Any, TextIO
+import os
+from datetime import datetime
+from io import StringIO
+import json
 
 class VenaETL:
     def __init__(self, hub: str, api_user: str, api_key: str, template_id: str, model_id: Optional[str] = None):
@@ -100,47 +104,109 @@ class VenaETL:
 
         self._monitor_job_status(job_id)
 
-    def start_with_file(self, df: pd.DataFrame, filename: str = "data.csv") -> None:
+    def _dataframe_to_csv_string(self, df: pd.DataFrame) -> str:
         """
-        Starts an ETL job with the provided DataFrame as a CSV file.
+        Convert a DataFrame to a CSV string in the format required by Vena.
         
         Args:
-            df (pd.DataFrame): The DataFrame to be converted to CSV and uploaded
-            filename (str): Name of the file to be uploaded (default: "data.csv")
+            df (pd.DataFrame): The DataFrame to convert
+            
+        Returns:
+            str: CSV string in the required format
         """
-        self._validate_dataframe(df)
+        # Ensure all columns are strings
+        df = df.astype(str)
+        
+        # Create CSV string
+        output = StringIO()
+        df.to_csv(output, index=False, header=True)
+        return output.getvalue()
+
+    def start_with_file(self, file: Union[str, pd.DataFrame, TextIO], filename: str = None) -> str:
+        """
+        Start an ETL job using a file or DataFrame.
+        
+        Args:
+            file: Can be one of:
+                - str: Path to a CSV file
+                - pd.DataFrame: DataFrame to convert to CSV
+                - TextIO: File-like object containing CSV data
+            filename (str, optional): Name for the file in Vena. If not provided,
+                will use the input filename or generate a default name.
             
+        Returns:
+            str: Job ID for monitoring
+            
+        Raises:
+            ValueError: If file is invalid or empty
+            requests.exceptions.RequestException: If API request fails
+        """
         try:
-            # Convert DataFrame to CSV in memory with proper formatting
-            csv_buffer = io.StringIO()
+            # Handle different input types
+            if isinstance(file, str):
+                # File path
+                if not os.path.exists(file):
+                    raise ValueError(f"File not found: {file}")
+                with open(file, 'r') as f:
+                    file_content = f.read()
+                if not filename:
+                    filename = os.path.basename(file)
             
-            # Ensure all values are strings and handle NaN values
-            df = df.fillna('')
-            df = df.astype(str)
+            elif isinstance(file, pd.DataFrame):
+                # DataFrame
+                if file.empty:
+                    raise ValueError("DataFrame is empty")
+                file_content = self._dataframe_to_csv_string(file)
+                if not filename:
+                    filename = f"data_upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             
-            # Write to CSV with proper formatting
-            df.to_csv(
-                csv_buffer,
-                index=False,
-                quoting=1,  # Quote all fields
-                escapechar='\\',
-                doublequote=False
-            )
-            csv_data = csv_buffer.getvalue()
+            elif hasattr(file, 'read'):
+                # File-like object
+                file_content = file.read()
+                if not filename:
+                    filename = f"data_upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             
-            # Prepare the file for upload with proper content type
-            files = {
-                'file': (filename, csv_data, 'text/csv; charset=utf-8')
+            else:
+                raise ValueError("Invalid file type. Must be file path, DataFrame, or file-like object")
+
+            # Validate file content
+            if not file_content.strip():
+                raise ValueError("File is empty")
+
+            # Prepare the request
+            url = self.start_with_file_url
+            
+            # Create metadata JSON with required fields
+            metadata = {
+                "input": {
+                    "partName": "file",
+                    "fileFormat": "CSV",
+                    "fileEncoding": "UTF-8",
+                    "fileName": filename
+                }
             }
             
-            # Make the request with proper headers
+            # Create multipart form data with proper encoding
+            files = {
+                'file': (  # This key must match the partName in metadata
+                    filename,
+                    file_content.encode('utf-8'),
+                    'text/csv; charset=utf-8'
+                ),
+                'metadata': (
+                    'metadata.json',
+                    json.dumps(metadata).encode('utf-8'),
+                    'application/json'
+                )
+            }
+            
+            # Make the request with proper authentication and headers
             response = requests.post(
-                self.start_with_file_url,
+                url,
                 files=files,
                 auth=(self.api_user, self.api_key),
                 headers={
-                    **self.file_headers,
-                    'Content-Type': 'multipart/form-data'
+                    "accept": "application/json"
                 }
             )
             
@@ -152,16 +218,31 @@ class VenaETL:
                 except:
                     error_msg = f"Error response: {response.text}"
                 raise requests.exceptions.RequestException(error_msg)
-                
+            
             response.raise_for_status()
-            job_id = response.json()['id']
+            
+            # Extract and return job ID
+            job_id = response.json().get('id')
+            if not job_id:
+                raise ValueError("No job ID received from Vena API")
+            
+            print(f"ETL job started with ID: {job_id}")
             
             # Monitor the job status
             self._monitor_job_status(job_id)
             
-        except Exception as e:
-            print(f"Failed to start ETL job with file: {str(e)}", file=sys.stderr)
-            raise  # Re-raise the exception to be handled by the caller
+            return job_id
+            
+        except requests.exceptions.RequestException as e:
+            error_msg = str(e)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    error_msg = f"{error_msg}\nDetails: {error_detail}"
+                except:
+                    pass
+            print(f"Error starting ETL job: {error_msg}")
+            raise
 
     def _monitor_job_status(self, job_id: str) -> None:
         """
