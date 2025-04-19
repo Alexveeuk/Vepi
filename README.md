@@ -40,55 +40,6 @@ vena_etl = VenaETL(
 )
 ```
 
-### Job Management
-
-#### Running a Job
-
-The simplest way to run a job is using the `run_job` method:
-
-```python
-# Run a job and wait for completion
-result = vena_etl.run_job(
-    poll_interval=5,  # How often to check job status (seconds)
-    timeout=3600     # Maximum time to wait (seconds)
-)
-
-# Check the result
-print(f"Job status: {result.get('status')}")
-print(f"Job ID: {result.get('id')}")
-print(f"Model: {result.get('modelName')}")
-```
-
-#### Step-by-Step Job Management
-
-For more control, you can manage jobs step by step:
-
-```python
-# Create a new job
-job_id = vena_etl.create_job()
-print(f"Created job with ID: {job_id}")
-
-# Get job status
-status = vena_etl.get_job_status(job_id)
-print(f"Current status: {status.get('status')}")
-
-# Submit the job
-submit_result = vena_etl.submit_job(job_id)
-print(f"Submission result: {submit_result}")
-
-# Wait for completion
-final_status = vena_etl.wait_for_job_completion(job_id)
-print(f"Final status: {final_status.get('status')}")
-```
-
-#### Canceling a Job
-
-```python
-# Cancel a running job
-cancel_result = vena_etl.cancel_job(job_id)
-print(f"Cancel result: {cancel_result.get('status')}")
-```
-
 ### Importing Data
 
 #### Using DataFrame (start_with_data)
@@ -153,6 +104,56 @@ print(f"Exported {len(exported_data)} records")
 hierarchy = vena_etl.get_dimension_hierarchy()
 print("Dimension hierarchy:")
 print(hierarchy)
+```
+
+### Job Management
+
+#### Running a Job
+
+The simplest way to run a job is using the `run_job` method:
+
+```python
+# Run a job with a specific template ID
+result = vena_etl.run_job(
+    template_id=JOB_TEMPLATE_ID,  # Specify the template ID for the job
+    poll_interval=5,  # How often to check job status (seconds)
+    timeout=3600     # Maximum time to wait (seconds)
+)
+
+# Check the result
+print(f"Job status: {result.get('status')}")
+print(f"Job ID: {result.get('id')}")
+print(f"Model: {result.get('modelName')}")
+```
+
+#### Step-by-Step Job Management
+
+For more control, you can manage jobs step by step:
+
+```python
+# Create a new job with a specific template ID
+job_id = vena_etl.create_job(template_id=JOB_TEMPLATE_ID)
+print(f"Created job with ID: {job_id}")
+
+# Get job status
+status = vena_etl.get_job_status(job_id)
+print(f"Current status: {status.get('status')}")
+
+# Submit the job
+submit_result = vena_etl.submit_job(job_id)
+print(f"Submission result: {submit_result}")
+
+# Wait for completion
+final_status = vena_etl.wait_for_job_completion(job_id)
+print(f"Final status: {final_status.get('status')}")
+```
+
+#### Canceling a Job
+
+```python
+# Cancel a running job
+cancel_result = vena_etl.cancel_job(job_id)
+print(f"Cancel result: {cancel_result.get('status')}")
 ```
 
 ## Error Handling

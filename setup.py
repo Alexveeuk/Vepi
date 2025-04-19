@@ -14,7 +14,7 @@ for root, dirs, files in os.walk('vepi'):
 
 setup(
     name="vepi",
-    version="0.1.2",
+    version="0.1.3",
     author="Alexander Viljoen",
     author_email="Alexander.Viljoen@gmail.com",
     description="A Python package for interacting with Vena's ETL API",

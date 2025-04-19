@@ -25,6 +25,17 @@ venv/
 ENV/
 env/
 test_env/
+test_env_pypi/
+testenv/
+testenv_pypi/
+.venv/
+.venv*/
+**/venv/
+**/venv*/
+**/test_env/
+**/test_env_pypi/
+**/testenv/
+**/testenv_pypi/
 
 # IDE
 .idea/
@@ -55,6 +66,8 @@ htmlcov/
 .env.development
 .env.test
 .env.production
+.env.pypi
+.env.test_pypi
 
 # Package build files
 *.egg
@@ -70,4 +83,38 @@ docs/_templates/
 
 # Logs
 *.log
-logs/ 
+logs/
+
+# Binary files
+*.pyd
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.o
+*.obj
+*.exe
+*.dll
+*.manifest
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.dll
+*.exe
+*.bin
+*.dat
+*.out
+*.pid
+*.gz
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z 
