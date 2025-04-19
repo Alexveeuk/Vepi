@@ -32,26 +32,29 @@ test_env/
 *.swp
 *.swo
 
-# Test configuration
+# Test files and configurations
 test_config.py
-tests/test_config.py
-tests/credentials.py
-tests/*.log
-
-# Logs
-*.log
-
-# Local development
-.env
-.env.local
-
-# Test coverage
+tests/
+*.test.py
+*_test.py
+*_tests.py
+test_*.py
+tests_*.py
 .coverage
-htmlcov/
 coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
 
-# PyPI configuration
-.pypirc
+# Environment files
+.env
+.env.*
+!.env.example
+.env.local
+.env.development
+.env.test
+.env.production
 
 # Package build files
 *.egg
@@ -65,6 +68,6 @@ docs/_build/
 docs/_static/
 docs/_templates/
 
-# Local development
-.env
-.env.local 
+# Logs
+*.log
+logs/ 
