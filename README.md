@@ -1,6 +1,6 @@
 # Vepi - Vena ETL Python Interface
 
-A Python package for interacting with Vena's ETL API, providing a simple interface for data import and export operations.
+A Python package for interacting with Vena's ETL API, providing a simple interface for data import, export, and job management operations.
 
 note this is not an official Vena package this is a hobby project.
 
@@ -20,6 +20,7 @@ API_USER = 'your_api_user'
 API_KEY = 'your_api_key'
 TEMPLATE_ID = 'your_template_id'
 MODEL_ID = 'your_model_id'  # Optional, needed for exports
+JOB_TEMPLATE_ID = 'your_job_template_id'  # Template ID for job operations
 ```
 
 ## Usage
@@ -37,6 +38,55 @@ vena_etl = VenaETL(
     template_id=TEMPLATE_ID,
     model_id=MODEL_ID
 )
+```
+
+### Job Management
+
+#### Running a Job
+
+The simplest way to run a job is using the `run_job` method:
+
+```python
+# Run a job and wait for completion
+result = vena_etl.run_job(
+    poll_interval=5,  # How often to check job status (seconds)
+    timeout=3600     # Maximum time to wait (seconds)
+)
+
+# Check the result
+print(f"Job status: {result.get('status')}")
+print(f"Job ID: {result.get('id')}")
+print(f"Model: {result.get('modelName')}")
+```
+
+#### Step-by-Step Job Management
+
+For more control, you can manage jobs step by step:
+
+```python
+# Create a new job
+job_id = vena_etl.create_job()
+print(f"Created job with ID: {job_id}")
+
+# Get job status
+status = vena_etl.get_job_status(job_id)
+print(f"Current status: {status.get('status')}")
+
+# Submit the job
+submit_result = vena_etl.submit_job(job_id)
+print(f"Submission result: {submit_result}")
+
+# Wait for completion
+final_status = vena_etl.wait_for_job_completion(job_id)
+print(f"Final status: {final_status.get('status')}")
+```
+
+#### Canceling a Job
+
+```python
+# Cancel a running job
+cancel_result = vena_etl.cancel_job(job_id)
+print(f"Cancel result: {cancel_result.get('status')}")
 ```
 
 ### Importing Data
@@ -112,6 +162,8 @@ The package includes comprehensive error handling for:
 - Missing required fields
 - API communication errors
 - Data validation errors
+- Job submission errors
+- Job cancellation errors
 
 ## License
 

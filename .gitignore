@@ -24,6 +24,7 @@ wheels/
 venv/
 ENV/
 env/
+test_env/
 
 # IDE
 .idea/
@@ -33,9 +34,36 @@ env/
 
 # Test configuration
 test_config.py
+tests/test_config.py
+tests/credentials.py
+tests/*.log
 
 # Logs
 *.log
+
+# Local development
+.env
+.env.local
+
+# Test coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# PyPI configuration
+.pypirc
+
+# Package build files
+*.egg
+*.egg-info/
+build/
+dist/
+pip-wheel-metadata/
+
+# Documentation
+docs/_build/
+docs/_static/
+docs/_templates/
 
 # Local development
 .env

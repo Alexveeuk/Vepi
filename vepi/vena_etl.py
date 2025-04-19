@@ -1,3 +1,33 @@
+"""
+Vena ETL Client for Python
+
+This module provides a client for interacting with Vena's ETL API.
+It supports data import, export, and job management operations.
+
+Example usage:
+    >>> from vepi import VenaETL
+    >>> client = VenaETL(
+    ...     hub='us1',
+    ...     api_user='your_api_user',
+    ...     api_key='your_api_key',
+    ...     template_id='your_template_id',
+    ...     model_id='your_model_id'
+    ... )
+    >>> 
+    >>> # Import data
+    >>> df = pd.DataFrame(...)
+    >>> client.import_dataframe(df)
+    >>> 
+    >>> # Export data
+    >>> exported_data = client.export_data()
+    >>> 
+    >>> # Run a job
+    >>> result = client.run_job()
+    >>> 
+    >>> # Cancel a job
+    >>> client.cancel_job(job_id)
+"""
+
 import requests
 import time
 import sys
@@ -10,6 +40,23 @@ from io import StringIO
 import json
 
 class VenaETL:
+    """
+    Client for interacting with Vena's ETL API.
+    
+    This class provides methods for:
+    - Data import and export
+    - Job creation and management
+    - Job status monitoring
+    - Job cancellation
+    
+    Attributes:
+        hub (str): Data center hub (e.g., us1, us2, ca3)
+        api_user (str): API user from Vena authentication token
+        api_key (str): API key from Vena authentication token
+        template_id (str): ETL template ID
+        model_id (str, optional): Model ID for export operations
+    """
+    
     def __init__(self, hub: str, api_user: str, api_key: str, template_id: str, model_id: Optional[str] = None):
         """
         Initialize the Vena ETL client.
@@ -34,6 +81,8 @@ class VenaETL:
         self.base_url = f'https://{hub}.vena.io/api/public/v1'
         self.start_with_data_url = f'{self.base_url}/etl/templates/{template_id}/startWithData'
         self.start_with_file_url = f'{self.base_url}/etl/templates/{template_id}/startWithFile'
+        self.create_job_url = f'{self.base_url}/etl/templates/{template_id}/jobs'
+        self.job_status_url = f'{self.base_url}/etl/jobs'  # Base URL for job operations
         self.intersections_url = f'{self.base_url}/models/{model_id}/intersections' if model_id else None
         
         # Headers for requests
@@ -418,3 +467,247 @@ class VenaETL:
                 except:
                     print(f"Error response: {e.response.text}", file=sys.stderr)
             return None 
+
+    def upload_job_data(self, job_id: str, data: Union[pd.DataFrame, List[Dict[str, Any]]]) -> Dict[str, Any]:
+        """
+        Upload data to a job before submission.
+        
+        Args:
+            job_id (str): The ID of the job to upload data to
+            data (Union[pd.DataFrame, List[Dict[str, Any]]]): The data to upload
+            
+        Returns:
+            Dict[str, Any]: The upload response
+            
+        Raises:
+            requests.exceptions.RequestException: If the API request fails
+        """
+        url = f"{self.job_status_url}/{job_id}/data"
+        
+        # Convert DataFrame to list of dictionaries if needed
+        if isinstance(data, pd.DataFrame):
+            data = data.to_dict('records')
+            
+        body = {
+            "data": data
+        }
+        
+        try:
+            response = requests.post(
+                url,
+                headers=self.headers,
+                auth=(self.api_user, self.api_key),
+                json=body
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 422:
+                print(f"Error uploading data: {e.response.text}")
+                try:
+                    error_details = e.response.json()
+                    print(f"Error details: {error_details}")
+                except:
+                    pass
+            raise
+
+    def create_job(self) -> str:
+        """
+        Create a new ETL job in EDITING stage.
+        
+        Returns:
+            str: The ID of the created job
+            
+        Raises:
+            requests.exceptions.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/etl/templates/{self.template_id}/jobs"
+        response = requests.post(
+            url,
+            headers=self.headers,
+            auth=(self.api_user, self.api_key)
+        )
+        if response.status_code == 422:
+            print(f"Error response content: {response.text}")
+        response.raise_for_status()
+        return response.json().get('id')
+
+    def submit_job(self, job_id: str) -> Dict[str, Any]:
+        """
+        Submit a job for processing.
+        
+        Args:
+            job_id (str): The ID of the job to submit
+            
+        Returns:
+            Dict[str, Any]: The submission response
+            
+        Raises:
+            requests.exceptions.RequestException: If the API request fails
+        """
+        url = f"{self.job_status_url}/{job_id}/submit"
+        response = requests.post(
+            url, 
+            headers=self.headers, 
+            auth=(self.api_user, self.api_key)
+        )
+        if response.status_code == 422:
+            print(f"Error response content: {response.text}")
+        response.raise_for_status()
+        return response.json()
+
+    def get_job_status(self, job_id: str) -> Dict[str, Any]:
+        """
+        Get the current status of a job.
+        
+        Args:
+            job_id (str): The ID of the job to check
+            
+        Returns:
+            Dict[str, Any]: The job status information
+            
+        Raises:
+            requests.exceptions.RequestException: If the API request fails
+        """
+        url = f"{self.job_status_url}/{job_id}"
+        response = requests.get(url, headers=self.headers, auth=(self.api_user, self.api_key))
+        response.raise_for_status()
+        return response.json()
+
+    def wait_for_job_completion(self, job_id: str, poll_interval: int = 5, timeout: int = 3600) -> Dict[str, Any]:
+        """
+        Wait for a job to complete, polling its status at regular intervals.
+        
+        Args:
+            job_id (str): The ID of the job to monitor
+            poll_interval (int): How often to check the job status (in seconds)
+            timeout (int): Maximum time to wait for completion (in seconds)
+            
+        Returns:
+            Dict[str, Any]: The final job status
+            
+        Raises:
+            TimeoutError: If the job doesn't complete within the timeout period
+            requests.exceptions.RequestException: If the API request fails
+        """
+        start_time = time.time()
+        while True:
+            status = self.get_job_status(job_id)
+            if status.get('status') in ['COMPLETED', 'FAILED']:
+                return status
+                
+            if time.time() - start_time > timeout:
+                raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
+                
+            time.sleep(poll_interval)
+
+    def process_data(self, data: Union[pd.DataFrame, List[Dict[str, Any]]], poll_interval: int = 5, timeout: int = 3600) -> Dict[str, Any]:
+        """
+        Process data through the ETL pipeline: start job, submit it, and wait for completion.
+        
+        Args:
+            data (Union[pd.DataFrame, List[Dict[str, Any]]]): The data to process
+            poll_interval (int): How often to check the job status (in seconds)
+            timeout (int): Maximum time to wait for completion (in seconds)
+            
+        Returns:
+            Dict[str, Any]: The final job status
+            
+        Raises:
+            ValueError: If the data is invalid
+            TimeoutError: If the job doesn't complete within the timeout period
+            requests.exceptions.RequestException: If any API request fails
+        """
+        # Start the job
+        job_info = self.start_with_data(data)
+        job_id = job_info['id']
+        
+        # Submit the job
+        self.submit_job(job_id)
+        
+        # Wait for completion
+        return self.wait_for_job_completion(job_id, poll_interval, timeout)
+
+    def run_job(self, poll_interval: int = 5, timeout: int = 3600) -> Dict[str, Any]:
+        """
+        Run a complete job workflow: create job, submit it, and wait for completion.
+        
+        Args:
+            poll_interval (int): How often to check the job status (in seconds)
+            timeout (int): Maximum time to wait for completion (in seconds)
+            
+        Returns:
+            Dict[str, Any]: The final job status containing:
+                - id: The job ID
+                - name: The job name
+                - modelId: The model ID
+                - modelName: The model name
+                - createdDate: Creation timestamp
+                - updatedDate: Last update timestamp
+                - userName: Name of the user who created the job
+                - status: Final job status
+                - error: Any error message (if applicable)
+                - warnings: Any warnings (if applicable)
+            
+        Raises:
+            requests.exceptions.RequestException: If any API request fails
+            TimeoutError: If the job doesn't complete within the timeout period
+        """
+        print("Creating job...")
+        job_id = self.create_job()
+        
+        if not job_id:
+            raise ValueError("Failed to create job")
+            
+        print(f"Job created successfully with ID: {job_id}")
+        
+        # Get initial job status
+        initial_status = self.get_job_status(job_id)
+        print(f"Initial job status: {initial_status.get('status') if initial_status else 'Unknown'}")
+        
+        # Submit the job
+        print("Submitting job...")
+        submit_result = self.submit_job(job_id)
+        print(f"Job submitted successfully: {submit_result}")
+        
+        # Wait for completion
+        print("Waiting for job completion...")
+        final_status = self.wait_for_job_completion(job_id, poll_interval, timeout)
+        print(f"Job completed with status: {final_status.get('status')}")
+        
+        if final_status.get('error'):
+            print(f"Error: {final_status.get('error')}")
+        if final_status.get('warnings'):
+            print(f"Warnings: {final_status.get('warnings')}")
+            
+        return final_status
+
+    def cancel_job(self, job_id: str) -> Dict[str, Any]:
+        """
+        Cancel a currently running ETL job.
+        
+        Args:
+            job_id (str): The ID of the job to cancel
+            
+        Returns:
+            Dict[str, Any]: The cancellation response containing:
+                - id: The job ID
+                - name: The job name
+                - modelId: The model ID
+                - modelName: The model name
+                - createdDate: Creation timestamp
+                - updatedDate: Last update timestamp
+                - userName: Name of the user who created the job
+                - status: Current job status (should be "CANCELLED" on success)
+            
+        Raises:
+            requests.exceptions.RequestException: If the API request fails
+        """
+        url = f"{self.job_status_url}/{job_id}/cancel"
+        response = requests.post(
+            url,
+            headers=self.headers,
+            auth=(self.api_user, self.api_key)
+        )
+        response.raise_for_status()
+        return response.json() 
