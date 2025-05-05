@@ -79,11 +79,13 @@ class VenaETL:
         
         # API URLs
         self.base_url = f'https://{hub}.vena.io/api/public/v1'
+        self.closed_url = f'https://{hub}.vena.io/api/'
         self.start_with_data_url = f'{self.base_url}/etl/templates/{template_id}/startWithData'
         self.start_with_file_url = f'{self.base_url}/etl/templates/{template_id}/startWithFile'
         self.create_job_url = f'{self.base_url}/etl/templates/{template_id}/jobs'
         self.job_status_url = f'{self.base_url}/etl/jobs'  # Base URL for job operations
         self.intersections_url = f'{self.base_url}/models/{model_id}/intersections' if model_id else None
+        self.models_url = f'{self.closed_url}/models'
         
         # Headers for requests
         self.headers = {
@@ -711,3 +713,38 @@ class VenaETL:
         )
         response.raise_for_status()
         return response.json() 
+    
+    def models(self) -> Dict[str, Any]:
+        url = f"{self.models_url}"
+        response = requests.get(url, headers=self.headers, auth=(self.api_user, self.api_key))
+        response.raise_for_status()
+        return response.json()
+
+    def get_models(self):
+        """
+        Get a DataFrame of models with id, name, and description.
+        
+        Returns:
+            pd.DataFrame: DataFrame containing model information with columns:
+                - id: Model ID
+                - name: Model name
+                - desc: Model description
+        """
+        try:
+            # Get models data
+            models_data = self.models()
+            
+            # Extract only the required fields
+            models_list = [{
+                'id': model['id'],
+                'name': model['name'],
+                'desc': model['desc']
+            } for model in models_data]
+            
+            # Convert to DataFrame
+            return pd.DataFrame(models_list)
+            
+        except Exception as e:
+            print(f"Error creating models DataFrame: {e}", file=sys.stderr)
+            return None
+
