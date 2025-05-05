@@ -86,6 +86,7 @@ class VenaETL:
         self.job_status_url = f'{self.base_url}/etl/jobs'  # Base URL for job operations
         self.intersections_url = f'{self.base_url}/models/{model_id}/intersections' if model_id else None
         self.models_url = f'{self.closed_url}/models'
+        self.processes_url = f'{self.closed_url}/processes'
         
         # Headers for requests
         self.headers = {
@@ -747,4 +748,102 @@ class VenaETL:
         except Exception as e:
             print(f"Error creating models DataFrame: {e}", file=sys.stderr)
             return None
+
+    def processes(self):
+        url = f"{self.processes_url}"
+        response = requests.get(url, headers=self.headers, auth=(self.api_user, self.api_key))
+        response.raise_for_status()
+        return response.json()
+    
+    def get_processes(self):
+        """
+        Get a DataFrame of processes with their details.
+        
+        Returns:
+            pd.DataFrame: DataFrame containing process information with columns:
+                - id: Process ID
+                - name: Process name
+                - status: Process status
+                - processFolderId: Parent process folder ID
+                - allModels: List of associated models
+        """
+        try:
+            # Get processes data
+            processes_data = self.processes()
+            
+            if not processes_data:
+                print("No processes data received")
+                return None
+                
+            # Extract only the required fields with safe access
+            processes_list = []
+            for process in processes_data:
+                try:
+                    process_info = {
+                        'id': process.get('id', ''),
+                        'name': process.get('name', ''),
+                        'status': process.get('status', ''),
+                        'processFolderId': process.get('processFolderId', ''),
+                        'allModels': process.get('allModels', [])
+                    }
+                    processes_list.append(process_info)
+                except Exception as e:
+                    print(f"Error processing process: {e}")
+                    continue
+            
+            if not processes_list:
+                print("No valid processes found in the data")
+                return None
+                
+            # Convert to DataFrame
+            df = pd.DataFrame(processes_list)
+            print(f"Successfully created DataFrame with {len(df)} processes")
+            return df
+            
+        except Exception as e:
+            print(f"Error creating processes DataFrame: {e}", file=sys.stderr)
+            return None
+
+    def job_history(self, offset: int = 0) -> Dict[str, Any]:
+        """
+        Get job history from the ETL v2 API.
+        
+        Args:
+            offset (int): Number of records to skip (default: 0)
+            
+        Returns:
+            Dict[str, Any]: Job history data containing:
+                - jobs: List of job records
+                - total: Total number of jobs
+                - offset: Current offset
+                - limit: Number of records per page
+        """
+        try:
+            # Construct the URL with fixed parameters and configurable offset
+            # Using the closed API URL for v2 endpoints
+            url = f"{self.closed_url}/etl/v2/jobs?offset={offset}&requested=100&orderBy=id&orderDirection=desc"
+            
+            # Make the API request
+            response = requests.get(
+                url,
+                headers=self.headers,
+                auth=(self.api_user, self.api_key)
+            )
+            response.raise_for_status()
+            
+            # Parse and return the response
+            data = response.json()
+            print(f"Retrieved {len(data.get('jobs', []))} jobs from history")
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error retrieving job history: {e}", file=sys.stderr)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    print(f"Error details: {error_data}", file=sys.stderr)
+                except:
+                    print(f"Error response: {e.response.text}", file=sys.stderr)
+            return None
+
 
