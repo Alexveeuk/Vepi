@@ -40,6 +40,35 @@ vena_etl = VenaETL(
 )
 ```
 
+### Getting Models and Processes
+
+#### Get Models
+```python
+# Get a DataFrame of all models
+models_df = vena_etl.get_models()
+print(f"Found {len(models_df)} models")
+print(models_df[['id', 'name', 'desc']])
+```
+
+#### Get Processes
+```python
+# Get a DataFrame of all processes
+processes_df = vena_etl.get_processes()
+print(f"Found {len(processes_df)} processes")
+print(processes_df[['id', 'name', 'status', 'processFolderId']])
+```
+
+#### Get Job History
+```python
+# Get job history with default offset (0)
+jobs = vena_etl.job_history()
+print(f"Retrieved {len(jobs.get('jobs', []))} jobs")
+
+# Get next page of jobs
+next_jobs = vena_etl.job_history(offset=100)
+print(f"Retrieved {len(next_jobs.get('jobs', []))} more jobs")
+```
+
 ### Importing Data
 
 #### Using DataFrame (start_with_data)
@@ -165,6 +194,7 @@ The package includes comprehensive error handling for:
 - Data validation errors
 - Job submission errors
 - Job cancellation errors
+- Model and process retrieval errors
 
 ## License
 
